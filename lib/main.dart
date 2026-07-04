@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'mqtt_handler.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
+import 'package:flutter/material.dart';
 
 // =========================================================================
 // KHỞI TẠO BỘ ĐIỀU KHIỂN THÔNG BÁO TOÀN CỤC
@@ -13,23 +14,53 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
 void main() async {
+  // 1. Đảm bảo khởi tạo binding
   WidgetsFlutterBinding.ensureInitialized();
-  await Hive.initFlutter();
-  await Hive.openBox('sensor_history');
 
-  // Cấu hình Icon cho thông báo (Dùng icon mặc định của Android)
-  const AndroidInitializationSettings initializationSettingsAndroid =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-  const InitializationSettings initializationSettings = InitializationSettings(
-    android: initializationSettingsAndroid,
-  );
-  await flutterLocalNotificationsPlugin.initialize(
-    settings: initializationSettings,
-  );
+  // 2. BẪY LỖI GIAO DIỆN: Biến màn hình trắng thành màn hình hiện lỗi chi tiết!
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Material(
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        color: Colors.black,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            child: Text(
+              "🚨 LỖI GIAO DIỆN (RELEASE):\n\n${details.exception}\n\n${details.stack}",
+              style: const TextStyle(color: Colors.yellow, fontSize: 14),
+            ),
+          ),
+        ),
+      ),
+    );
+  };
 
-  runApp(
-    const MaterialApp(debugShowCheckedModeBanner: false, home: AirQualityApp()),
-  );
+  // 3. BẪY LỖI KHỞI TẠO (SharedPreferences, Firebase, MQTT, v.v.)
+  try {
+    // ---- CÁC CODE KHỞI TẠO CŨ CỦA BẬN ĐỂ Ở ĐÂY ----
+    // Ví dụ: await SharedPreferences.getInstance();
+    // ----------------------------------------------
+
+    runApp(const MyApp()); // Thay MyApp() bằng tên Widget chính của bạn
+  } catch (e, stackTrace) {
+    // Nếu lỗi trước khi kịp vẽ UI, sẽ hiện màn hình đỏ này
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.red[900],
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                "🚨 LỖI KHỞI TẠO MAIN():\n\n$e\n\n$stackTrace",
+                style: const TextStyle(color: Colors.white, fontSize: 15),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class AirQualityApp extends StatefulWidget {
