@@ -36,12 +36,9 @@ void main() async {
 
   // 3. BẪY LỖI KHỞI TẠO (SharedPreferences, Firebase, MQTT, Hive, v.v.)
   try {
-    // ---- CÁC CODE KHỞI TẠO CỦA BẠN ĐỂ Ở ĐÂY ----
-    // Ví dụ:
-    // await Hive.initFlutter();
-    // await Hive.openBox('sensor_history');
-    // ----------------------------------------------
-
+    await Hive.initFlutter();
+    await Hive.openBox('sensor_history');
+    debugPrint("🎉 Đã mở thành công hộp cơ sở dữ liệu Hive: sensor_history");
     runApp(const MyApp()); // Khởi chạy lớp gốc MyApp
   } catch (e, stackTrace) {
     // Nếu lỗi trước khi kịp vẽ UI, sẽ hiện màn hình đỏ này
