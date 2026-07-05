@@ -380,3 +380,18 @@ class _AirQualityAppState extends State<AirQualityApp> {
     );
   }
 }
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'DATN Air Quality',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      // Hãy thay LoginScreen() bên dưới bằng tên màn hình đầu tiên của bạn
+      home: const Scaffold(body: Center(child: Text('DATN Air Quality App'))),
+    );
+  }
+}
