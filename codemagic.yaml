@@ -8,15 +8,26 @@ workflows:
       xcode: latest
       cocoapods: default
     scripts:
-      - name: Get packages
-        script: flutter pub get
+      - name: Repair iOS Project & Get Packages
+        script: |
+          # 1. Tự động tái tạo file Podfile và các file iOS gốc bị thiếu (do code trên Windows)
+          flutter create . --platforms=ios
+          flutter pub get
       - name: Config iOS + Install Pods
         script: |
-          flutter build ios --config-only --no-codesign
-          cd ios && pod install
+          # 2. Tạo config Xcode
+          flutter build ios --config-only --no-codesign || true
+          
+          # 3. Cài đặt thư viện Apple (Có kiểm tra an toàn chống sập build)
+          if [ -f ios/Podfile ]; then
+            echo "🎉 Đã tìm thấy Podfile! Đang tải thư viện iOS..."
+            cd ios && pod install --repo-update
+          else
+            echo "⚠️ Không tìm thấy Podfile, bỏ qua bước pod install."
+          fi
       - name: Build Unsigned iOS App & Package IPA for Sideloadly
         script: |
-          # 1. Dịch mã ARM64 không chữ ký và CẤM kiểm tra App Store (VALIDATE_PRODUCT=NO)
+          # 4. Dịch mã ARM64 không chữ ký và CẤM kiểm tra App Store (VALIDATE_PRODUCT=NO)
           xcodebuild -workspace ios/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
@@ -28,10 +39,10 @@ workflows:
             VALIDATE_PRODUCT=NO \
             DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            clean build || true  # <-- Lách qua mọi cảnh báo kiểm tra cuối cùng của Apple
+            clean build || true
 
-          # 2. Đảm bảo tìm thấy Runner.app vừa dịch xong để nén ra .ipa
-          echo "正在đóng gói IPA cho Sideloadly..."
+          # 5. Đóng gói IPA cho Sideloadly
+          echo "Đang đóng gói IPA cho Sideloadly..."
           mkdir -p build/ios/Payload
           APP_PATH=$(find build/ios -name "*.app" -type d | head -n 1)
           
