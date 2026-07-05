@@ -7,30 +7,29 @@ workflows:
       flutter: stable
       xcode: latest
     scripts:
-      - name: Build iOS ARM64 via Xcode (Bypass Flutter Keychain Check)
+      - name: Build Unsigned iOS ARM64 App (Bypass Apple Signing Rules)
         script: |
-          # 1. Tải thư viện Flutter và chuẩn bị CocoaPods
+          # 1. Tải thư viện và chuẩn bị Pods
           flutter pub get
           flutter build ios --config-only --no-codesign || (cd ios && pod install || true)
 
-          # 2. GỌI THẲNG XCODEBUILD VỚI CHỮ KÝ AD-HOC (-)
-          # (Tuyệt chiêu: Lách qua bài kiểm tra của Flutter CLI và thỏa mãn luật Xcode 15)
+          # 2. BẺ KHÓA XCODE: ÉP BUỘC DỊCH MÃ ARM64 KHÔNG CẦN CHỮ KÝ (UNSIGNED)
+          # Lách qua luật cấm Ad-Hoc của Apple để lấy bản app trần cho Sideloadly tự ký
           xcodebuild -workspace ios/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -sdk iphoneos \
             SYMROOT="$PWD/build/ios" \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGN_STYLE="Manual" \
-            CODE_SIGNING_REQUIRED=YES \
-            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
             clean build
 
-      - name: Package IPA for Sideloadly
+      - name: Package Unsigned IPA for Sideloadly
         script: |
-          # 3. Gom App thành file .ipa chuẩn chỉnh cho Sideloadly
+          # 3. Gom thư mục Runner.app trần thành file .ipa chuẩn cho Sideloadly
           mkdir -p build/ios/Payload
           APP_PATH=$(find build/ios -name "*.app" -type d | head -n 1)
           cp -r "$APP_PATH" build/ios/Payload/
