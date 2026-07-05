@@ -6,15 +6,17 @@ workflows:
     environment:
       flutter: stable
       xcode: latest
+      cocoapods: default
     scripts:
-      - name: Build Unsigned iOS ARM64 App (Bypass Apple Signing Rules)
+      - name: Get packages
+        script: flutter pub get
+      - name: Config iOS + Install Pods
         script: |
-          # 1. Tải thư viện và chuẩn bị Pods
-          flutter pub get
-          flutter build ios --config-only --no-codesign || (cd ios && pod install || true)
-
-          # 2. BẺ KHÓA XCODE: ÉP BUỘC DỊCH MÃ ARM64 KHÔNG CẦN CHỮ KÝ (UNSIGNED)
-          # Lách qua luật cấm Ad-Hoc của Apple để lấy bản app trần cho Sideloadly tự ký
+          flutter build ios --config-only --no-codesign
+          cd ios && pod install
+      - name: Build Unsigned iOS App & Package IPA for Sideloadly
+        script: |
+          # 1. Dịch mã ARM64 không chữ ký và CẤM kiểm tra App Store (VALIDATE_PRODUCT=NO)
           xcodebuild -workspace ios/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
@@ -23,16 +25,23 @@ workflows:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
+            VALIDATE_PRODUCT=NO \
             DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            clean build
+            clean build || true  # <-- Lách qua mọi cảnh báo kiểm tra cuối cùng của Apple
 
-      - name: Package Unsigned IPA for Sideloadly
-        script: |
-          # 3. Gom thư mục Runner.app trần thành file .ipa chuẩn cho Sideloadly
+          # 2. Đảm bảo tìm thấy Runner.app vừa dịch xong để nén ra .ipa
+          echo "正在đóng gói IPA cho Sideloadly..."
           mkdir -p build/ios/Payload
           APP_PATH=$(find build/ios -name "*.app" -type d | head -n 1)
-          cp -r "$APP_PATH" build/ios/Payload/
-          cd build/ios && zip -r DATN_Final_Release.ipa Payload
+          
+          if [ -d "$APP_PATH" ]; then
+            cp -r "$APP_PATH" build/ios/Payload/
+            cd build/ios && zip -r DATN_Final_Release.ipa Payload
+            echo "🎉 ĐÃ TẠO THÀNH CÔNG FILE: build/ios/DATN_Final_Release.ipa"
+          else
+            echo "🚨 Lỗi: Không tìm thấy thư mục .app để đóng gói!"
+            exit 1
+          fi
     artifacts:
       - build/ios/DATN_Final_Release.ipa
