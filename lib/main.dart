@@ -1,11 +1,10 @@
-import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'mqtt_handler.dart';
-import 'login_screen.dart';
-import 'dashboard_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'dashboard_screen.dart';
+import 'login_screen.dart';
+import 'mqtt_handler.dart';
 
 // =========================================================================
 // KHỞI TẠO BỘ ĐIỀU KHIỂN THÔNG BÁO TOÀN CỤC
@@ -35,17 +34,20 @@ void main() async {
     );
   };
 
-  // 3. BẪY LỖI KHỞI TẠO (SharedPreferences, Firebase, MQTT, v.v.)
+  // 3. BẪY LỖI KHỞI TẠO (SharedPreferences, Firebase, MQTT, Hive, v.v.)
   try {
-    // ---- CÁC CODE KHỞI TẠO CŨ CỦA BẬN ĐỂ Ở ĐÂY ----
-    // Ví dụ: await SharedPreferences.getInstance();
+    // ---- CÁC CODE KHỞI TẠO CỦA BẠN ĐỂ Ở ĐÂY ----
+    // Ví dụ:
+    // await Hive.initFlutter();
+    // await Hive.openBox('sensor_history');
     // ----------------------------------------------
 
-    runApp(const MyApp()); // Thay MyApp() bằng tên Widget chính của bạn
+    runApp(const MyApp()); // Khởi chạy lớp gốc MyApp
   } catch (e, stackTrace) {
     // Nếu lỗi trước khi kịp vẽ UI, sẽ hiện màn hình đỏ này
     runApp(
       MaterialApp(
+        debugShowCheckedModeBanner: false,
         home: Scaffold(
           backgroundColor: Colors.red[900],
           body: SafeArea(
@@ -63,6 +65,27 @@ void main() async {
   }
 }
 
+// =========================================================================
+// LỚP GỐC: THIẾT LẬP THEME VÀ GỌI VÀO MÀN HÌNH ĐỒ ÁN CHÍNH
+// =========================================================================
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'DATN Air Quality - HUST',
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      // Đã kết nối chuẩn xác vào toàn bộ hệ thống giao diện & cảm biến MQTT của bạn!
+      home: const AirQualityApp(),
+    );
+  }
+}
+
+// =========================================================================
+// MÀN HÌNH CHÍNH CỦA ĐỒ ÁN (LOGIC MQTT, THÔNG BÁO, BÁO ĐỘNG)
+// =========================================================================
 class AirQualityApp extends StatefulWidget {
   const AirQualityApp({super.key});
   @override
@@ -92,11 +115,10 @@ class _AirQualityAppState extends State<AirQualityApp> {
   String connectionStatus = "Chưa kết nối";
   String currentMode = "NORMAL";
 
-  // ---> [BƯỚC 1]: THÊM 3 BIẾN LƯU CHU KỲ ĐO (Đơn vị: Giây) <---
+  // BIẾN LƯU CHU KỲ ĐO (Đơn vị: Giây)
   int _intNorm = 30; // Mặc định 30s
   int _intNight = 1200; // Mặc định 20 phút (1200s)
   int _intEco = 1800; // Mặc định 30 phút (1800s)
-  // -------------------------------------------------------------
 
   double filterUsedPercent = 0.0;
   bool isFilterExpired = false;
@@ -127,6 +149,7 @@ class _AirQualityAppState extends State<AirQualityApp> {
     await flutterLocalNotificationsPlugin.show(
       id: 0,
       title: '⚠️ NGUY HIỂM: CHẤT LƯỢNG KHÔNG KHÍ XẤU',
+      body: 'Phát hiện nồng độ khí độc vượt ngưỡng an toàn! Hãy kiểm tra ngay.',
       notificationDetails: platformChannelSpecifics,
     );
   }
@@ -156,22 +179,24 @@ class _AirQualityAppState extends State<AirQualityApp> {
 
             // --- LOGIC LƯU TRỮ LỊCH SỬ (7 NGÀY) ---
             if (currentHour != lastRecordedHour) {
-              var box = Hive.box('sensor_history');
-              box.put(ts, msg);
+              if (Hive.isBoxOpen('sensor_history')) {
+                var box = Hive.box('sensor_history');
+                box.put(ts, msg);
 
-              lastRecordedHour = currentHour;
-              debugPrint("Đã chốt lưu lịch sử cho mốc: $currentHour giờ");
+                lastRecordedHour = currentHour;
+                debugPrint("Đã chốt lưu lịch sử cho mốc: $currentHour giờ");
 
-              final int retentionDays = 7;
-              final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-              final int expirationBoundary =
-                  now - (retentionDays * 24 * 60 * 60);
+                final int retentionDays = 7;
+                final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+                final int expirationBoundary =
+                    now - (retentionDays * 24 * 60 * 60);
 
-              var expiredKeys = box.keys
-                  .where((key) => key < expirationBoundary)
-                  .toList();
-              if (expiredKeys.isNotEmpty) {
-                box.deleteAll(expiredKeys);
+                var expiredKeys = box.keys
+                    .where((key) => key < expirationBoundary)
+                    .toList();
+                if (expiredKeys.isNotEmpty) {
+                  box.deleteAll(expiredKeys);
+                }
               }
             }
 
@@ -188,14 +213,16 @@ class _AirQualityAppState extends State<AirQualityApp> {
                 currentMode = data['mode'].toString().toUpperCase();
               }
 
-              // ---> [BƯỚC 2]: CẬP NHẬT CHU KỲ TỪ MQTT JSON CỦA ESP32 <---
-              if (data.containsKey('int_norm'))
+              // CẬP NHẬT CHU KỲ TỪ MQTT JSON CỦA ESP32
+              if (data.containsKey('int_norm')) {
                 _intNorm = (data['int_norm'] as num).toInt();
-              if (data.containsKey('int_night'))
+              }
+              if (data.containsKey('int_night')) {
                 _intNight = (data['int_night'] as num).toInt();
-              if (data.containsKey('int_eco'))
+              }
+              if (data.containsKey('int_eco')) {
                 _intEco = (data['int_eco'] as num).toInt();
-              // -------------------------------------------------------------
+              }
 
               if (data.containsKey('filter_used')) {
                 filterUsedPercent = (data['filter_used'] as num).toDouble();
@@ -256,6 +283,7 @@ class _AirQualityAppState extends State<AirQualityApp> {
       appBar: AppBar(
         title: const Text("DATN - HUST - Vu Hoang"),
         backgroundColor: isAlarming ? Colors.redAccent : Colors.blueAccent,
+        foregroundColor: Colors.white,
       ),
       body: _isLoggedIn
           ? Column(
@@ -332,12 +360,11 @@ class _AirQualityAppState extends State<AirQualityApp> {
                     dust: dust,
                     activeMode: currentMode,
 
-                    // ---> [BƯỚC 3]: TRUYỀN 3 BIẾN NÀY VÀO LÀ HẾT LỖI ĐỎ <---
+                    // TRUYỀN BIẾN CHU KỲ
                     intNorm: _intNorm,
                     intNight: _intNight,
                     intEco: _intEco,
 
-                    // -------------------------------------------------------
                     onModeChanged: (newMode) =>
                         setState(() => currentMode = newMode),
                     onSendMessage: (jsonMsg) =>
@@ -350,8 +377,7 @@ class _AirQualityAppState extends State<AirQualityApp> {
                         currentMode = "NORMAL";
                         lastRecordedHour = -1;
                         isAlarming = false;
-                        _hasPushedNotification =
-                            false; // Xóa cờ spam khi đăng xuất
+                        _hasPushedNotification = false;
                       });
                     },
 
@@ -377,21 +403,6 @@ class _AirQualityAppState extends State<AirQualityApp> {
               passCtrl: _passController,
               onLogin: _login,
             ),
-    );
-  }
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'DATN Air Quality',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      // Hãy thay LoginScreen() bên dưới bằng tên màn hình đầu tiên của bạn
-      home: const Scaffold(body: Center(child: Text('DATN Air Quality App'))),
     );
   }
 }
